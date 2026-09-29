@@ -69,6 +69,12 @@ module zx8302
 );
 
 
+// $18003 (IPCWR): a bus cycle of the 68008 lasts many cycles of clk, and a
+// write is seen on each of them; only the first one must reach comdata_reg,
+// or a repeated write could overwrite it while the IPC is reading the bits
+reg  prev_ipc_wr_sel;
+wire ipc_wr_sel = cpu_sel && cpu_wr && cpu_lds && (cpu_addr == 2'b01);
+
 // comdata shift register
 wire ipc_comdata_in = comdata_reg[0];
 reg [3:0] comdata_reg /* synthesis noprune */;
@@ -93,6 +99,7 @@ always @(posedge clk) begin
 	if (reset) begin
 		comdata_reg <= 4'b0000;
 		ipc_busy <= 2'b11;
+		prev_ipc_wr_sel <= 1'b0;
 	end
 	else if(cen) begin
 		irq_ack <= 5'd0;
@@ -110,8 +117,8 @@ always @(posedge clk) begin
 			// odd addresses have lds asserted and use the lower 8 data bus bits
 			if (cpu_lds) begin
 				// 18003 - IPCWR
-				// (host sends a single bit to ipc)
-				if(cpu_addr == 2'b01) begin
+				// (host sends a single bit to ipc), once per bus cycle
+				if(cpu_addr == 2'b01 && !prev_ipc_wr_sel) begin
 					// data is ----XEDS
 					// S = start bit (should be 0)
 					// D = data bit (0/1)
@@ -128,6 +135,7 @@ always @(posedge clk) begin
 				end
 			end
 		end
+		prev_ipc_wr_sel <= ipc_wr_sel;
 	end
 	if (!ipc_comctrl && prev_ipc_comctrl) begin
 		comdata_to_cpu <= zx8302_comdata_in;	// Latch COMDATA since the IPC will quickly reset it to 1 when sending data
