@@ -18,7 +18,7 @@ module ql_timing
 	input			cpu_lds,
 	input       cpu_rw,
 	input			cpu_rom,
-
+	input			cpu_bram,	// the 128K of RAM on the motherboard, shared with the ZX8301
 
 	output reg	ram_delay_dtack
 );
@@ -73,7 +73,10 @@ begin
 			begin
 				if (dtack_count == 3'd1 && ram_delay_dtack)
 				begin
-					if (could_start || cpu_rom)
+					// Only the 128K on the motherboard are shared with the ZX8301: ROM,
+					// I/O and expansion RAM never wait for its chunks (they still pay
+					// the second access of the 8 bit bus of the 68008)
+					if (could_start || !cpu_bram)
 					begin
 						if (extra_access)
 						begin
