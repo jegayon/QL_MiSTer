@@ -34,7 +34,7 @@ module zx8301
 	input  [7:0] mc_stat,
 
 	// sdram interface
-	output reg [14:0] addr,
+	output     [14:0] addr,
 	input      [15:0] din,
 	
    // VIDEO output
@@ -194,6 +194,13 @@ wire [2:0] pixel_color_4bpp =
 
 reg flash_reg;
 reg [2:0] flash_col;
+
+// The screen base (bit 7 of $18063) is part of the video address at every
+// moment, so a switch between the two screens shows at once, even in the
+// middle of a frame; only the word counter runs with the beam
+reg [13:0] word_cnt;
+assign addr = {membase, word_cnt};
+
 always@(posedge clk) begin
 	ce_out <= 0;
 	if(ce) begin
@@ -201,10 +208,10 @@ always@(posedge clk) begin
 			flash_reg <= 1'b0;   // reset flash state at the begin of each line
 
 		if((v_cnt == V+1) && (h_cnt == H+1))
-			addr <= membase ? 15'h4000 : 15'h0000;  // word! address
+			word_cnt <= 14'd0;  // word! address
 
 		if((me)&&(h_cnt[2:0] == 3'b111)) begin
-			addr <= addr + 1'd1;
+			word_cnt <= word_cnt + 1'd1;
 			video_word <= din;
 			ce_out <= 1;
 		end else begin
