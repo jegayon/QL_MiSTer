@@ -61,7 +61,16 @@ begin
 					chunk <= chunk + 6'd1;
 			end
 
-			if (ds && ~prev_ds)
+			if (ds && ~prev_ds && !cpu_bram)
+			begin
+				// New bus access outside the 128K on the motherboard (ROM, I/O, expansion RAM):
+				// the ZX8301 is not involved, so there are no wait states. A 16 bit access only
+				// takes the 4 cycles of the second access of the 8 bit bus of the 68008.
+				ram_delay_dtack <= cpu_uds && cpu_lds;
+				dtack_count <= 3'd4;
+				extra_access <= 0;
+			end
+			else if (ds && ~prev_ds)
 			begin
 				// New bus access. ZX8301 takes about 1 cycle before deciding whether to insert wait states.
 				// ZX8301 only checks DS and not AS... as a result, at least one wait state is inserted for all writes.
