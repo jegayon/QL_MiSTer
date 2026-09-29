@@ -29,7 +29,7 @@ reg delay_reg;
 reg [5:0] chunk;					// We got 40 chunks per display line...
 reg [3:0] chunkCycle;			// ...with 12 cycles per chunk
 
-wire [5:0] num_busy_chunks = VBlank ? 6'd8 : 6'd32;	// 32 chunks used by ZX8301 for video, 8 during vblank for RAM refresh
+wire [5:0] num_busy_chunks = VBlank ? 6'd27 : 6'd28;	// 28 chunks used by ZX8301 for video, 27 during vblank (measured on a real QL)
 wire could_start = chunk >= num_busy_chunks || chunkCycle == 4'd0; // For used chunks, the CPU can only access RAM in-between 
 
 
@@ -73,15 +73,26 @@ begin
 			begin
 				// New bus access outside the 128K on the motherboard (ROM, I/O, expansion RAM):
 				// the ZX8301 is not involved, so there are no wait states. A 16 bit access only
-				// takes the 4 cycles of the second access of the 8 bit bus of the 68008.
+				// takes the second access of the 8 bit bus of the 68008 (counted from DS, which
+				// rises one cycle later in a write).
 				delay_reg <= cpu_uds && cpu_lds;
-				dtack_count <= 3'd4;
+				dtack_count <= cpu_rw ? 3'd4 : 3'd3;
+				extra_access <= 0;
+			end
+			else if (ds && ~prev_ds && could_start)
+			begin
+				// New bus access to the 128K on the motherboard in a free chunk: it goes on at
+				// once. A 16 bit access still takes its second access, which again waits for a
+				// free chunk. (A write gets its first wait state from new_access_wait, as the
+				// ZX8301 only checks DS.)
+				delay_reg <= cpu_uds && cpu_lds;
+				dtack_count <= cpu_rw ? 3'd4 : 3'd5;
 				extra_access <= 0;
 			end
 			else if (ds && ~prev_ds)
 			begin
-				// New bus access. ZX8301 takes about 1 cycle before deciding whether to insert wait states.
-				// ZX8301 only checks DS and not AS... as a result, at least one wait state is inserted for all writes.
+				// New bus access to the 128K on the motherboard in a busy chunk: wait for the
+				// ZX8301 to let it start.
 				delay_reg <= 1;
 				dtack_count <= 3'd1;
 				extra_access <= cpu_uds && cpu_lds;	// 16bit access?
