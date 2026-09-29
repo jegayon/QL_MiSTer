@@ -20,8 +20,10 @@ module ql_timing
 	input			cpu_rom,
 	input			cpu_bram,	// the 128K of RAM on the motherboard, shared with the ZX8301
 
-	output reg	ram_delay_dtack
+	output		ram_delay_dtack
 );
+
+reg delay_reg;
 
 
 reg [5:0] chunk;					// We got 40 chunks per display line...
@@ -35,6 +37,12 @@ wire ds;
 assign ds = cpu_uds || cpu_lds;
 reg prev_ds;
 
+// The 68000 asserts DS late in a write cycle, just before it samples DTACK: the wait must
+// start as soon as DS rises, not on the next bus cycle, or a write would not see it.
+// (Reads assert DS earlier, so for them nothing changes.)
+wire new_access_wait = enable && ds && !prev_ds && (cpu_bram || (cpu_uds && cpu_lds));
+assign ram_delay_dtack = delay_reg || new_access_wait;
+
 
 reg [2:0] dtack_count;
 reg extra_access;
@@ -45,7 +53,7 @@ begin
 	begin
 		chunk <= 0;
 		chunkCycle <= 0;
-		ram_delay_dtack <= 0;
+		delay_reg <= 0;
 	end 
 	else
 	begin
@@ -66,7 +74,7 @@ begin
 				// New bus access outside the 128K on the motherboard (ROM, I/O, expansion RAM):
 				// the ZX8301 is not involved, so there are no wait states. A 16 bit access only
 				// takes the 4 cycles of the second access of the 8 bit bus of the 68008.
-				ram_delay_dtack <= cpu_uds && cpu_lds;
+				delay_reg <= cpu_uds && cpu_lds;
 				dtack_count <= 3'd4;
 				extra_access <= 0;
 			end
@@ -74,13 +82,13 @@ begin
 			begin
 				// New bus access. ZX8301 takes about 1 cycle before deciding whether to insert wait states.
 				// ZX8301 only checks DS and not AS... as a result, at least one wait state is inserted for all writes.
-				ram_delay_dtack <= 1;
+				delay_reg <= 1;
 				dtack_count <= 3'd1;
 				extra_access <= cpu_uds && cpu_lds;	// 16bit access?
 			end
 			else
 			begin
-				if (dtack_count == 3'd1 && ram_delay_dtack)
+				if (dtack_count == 3'd1 && delay_reg)
 				begin
 					// Only the 128K on the motherboard are shared with the ZX8301: ROM,
 					// I/O and expansion RAM never wait for its chunks (they still pay
@@ -96,7 +104,7 @@ begin
 						end
 						else
 						begin
-							ram_delay_dtack <= 0;
+							delay_reg <= 0;
 						end
 					end
 				end
