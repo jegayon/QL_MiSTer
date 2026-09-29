@@ -14,3 +14,10 @@ set_global_assignment -name VERILOG_FILE rtl/zx8302.v
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/ql_timing.sv
 set_global_assignment -name SDC_FILE QL.sdc
 set_global_assignment -name SYSTEMVERILOG_FILE QL.sv
+set_global_assignment -name VERILOG_FILE rtl/qsound.v
+set_global_assignment -name VERILOG_FILE rtl/jt49.v
+set_global_assignment -name VERILOG_FILE rtl/jt49_noise.v
+set_global_assignment -name VERILOG_FILE rtl/jt49_eg.v
+set_global_assignment -name VERILOG_FILE rtl/jt49_div.v
+set_global_assignment -name VERILOG_FILE rtl/jt49_exp.v
+set_global_assignment -name VERILOG_FILE rtl/jt49_cen.v

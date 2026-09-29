@@ -63,20 +63,26 @@ parameter CONF_STR = {
 	"O2,MDV direction,normal,reverse;",
 	"-;",
 	"F4,ROM,Load OS;",
+	"F5,ROMBIN,Load QSound;",
 	"-;",
+	"O1,QSound (AY),On,Off;",
+	"OFG,QSound Clock,750 kHz (QL),1.00 MHz (CPC),1.77 MHz (ZX),2.00 MHz (ST);",
+	"OHI,AY Mode,Mono,Stereo ABC,Stereo ACB;",
 	"O3,Video mode,PAL,NTSC;",
 	"OBC,Aspect ratio,Original,Full Screen,[ARC1],[ARC2];",
 	"O9A,Scandoubler Fx,None,HQ2x,CRT 25%,CRT 50%;",
 	"ODE,Scale,Normal,V-Integer,Narrower HV-Integer,Wider HV-Integer;",
 	"-;",
 	"O78,CPU speed,QL,16 Mhz,24 Mhz,Full;",
-	"O45,RAM,128k,640k,896k,4096k;",
+	"H0O45,RAM,128k,640k,896k,4096k;",
+	"h0O4,RAM,128k,640k;",
 	"R0,Reset & unload MDV;",
 	"V,v",`BUILD_DATE
 };
 
 parameter MDV_IOCTL_INDEX = 8'd2;
 parameter ROM_IOCTL_INDEX = 8'd4;
+parameter QSROM_IOCTL_INDEX = 8'd5;
 
 wire mdv_reverse = status[2];
 wire ntsc_mode = status[3];
@@ -88,7 +94,13 @@ wire gc_en = ram_cfg == 2'b11;
 wire [1:0] ar = status[12:11];
 
 reg [1:0] ram_cfg;			// 00 = 128k, 01 = 640k, 10 = 896k, 11 = 4096k
-always @(posedge clk_sys) if (reset) ram_cfg <= status[5:4];
+always @(posedge clk_sys) if (reset) ram_cfg <= ram_sel;
+
+// QSound lives at $0C0000: with it enabled only 128k and 640k are offered,
+// as 896k and 4096k use that address space
+wire qsound_enabled = ~status[1];
+wire [1:0] ram_sel = qsound_enabled ? {1'b0, status[4]} : status[5:4];
+wire qsound_active = qsound_enabled && !gc_en;
 
 
 /////////////////  CLOCKS  ////////////////////////
@@ -142,6 +154,29 @@ wire [16:0] fract_bus =
 	cpu_speed == 1? FRACT_BUS_16:
 	cpu_speed == 2? FRACT_BUS_24:
 	FRACT_BUS_FULL;
+
+// QSound AY clock enable: 84 MHz / 112, 84, 47 or 42
+wire [1:0] qsound_clk_sel = status[16:15];
+wire [6:0] ay_div_max = (qsound_clk_sel == 2'b00) ? 7'd111 :	// 750 kHz (QL)
+                        (qsound_clk_sel == 2'b01) ? 7'd83  :	// 1.00 MHz (CPC)
+                        (qsound_clk_sel == 2'b10) ? 7'd46  :	// 1.79 MHz (ZX)
+                                                    7'd41;	// 2.00 MHz (ST)
+
+reg ce_ay;
+reg [6:0] div_ay;
+
+always @(posedge clk_sys) begin
+	if (reset) begin
+		div_ay <= 0;
+		ce_ay  <= 0;
+	end else if (div_ay >= ay_div_max) begin
+		div_ay <= 0;
+		ce_ay  <= 1;
+	end else begin
+		div_ay <= div_ay + 1'd1;
+		ce_ay  <= 0;
+	end
+end
 
 reg ce_bus_p, ce_bus_n;
 reg ce_131k;									// Supposed to be 131025 Hz for SDRAM refresh and clock update
@@ -240,6 +275,7 @@ hps_io #(.CONF_STR(CONF_STR), .WIDE(1)) hps_io
 
 	.buttons(buttons),
 	.status(status),
+	.status_menumask({qsound_enabled}),
 	.forced_scandoubler(forced_scandoubler),
 	.gamma_bus(gamma_bus),
 	
@@ -352,7 +388,7 @@ end
 reg [11:0] reset_cnt;
 wire reset = (reset_cnt != 0);
 always @(posedge clk_sys) begin
-	if(RESET || buttons[1] || osd_reset || !pll_locked || rom_download)
+	if(RESET || buttons[1] || osd_reset || !pll_locked || rom_download || qsrom_download)
 		reset_cnt <= 12'hfff;
 	else if(ce_bus_p && reset_cnt != 0)
 		reset_cnt <= reset_cnt - 1'd1;
@@ -427,6 +463,25 @@ dpram #(15) ql_rom
 	.rdclock		( clk_sys				),
 	.rdaddress	( cpu_addr[15:1]		),
 	.q				( ql_rom_dout			)
+);
+
+//////////////////  QSound ROM (8KB at $0C0000)  //////////////////
+
+wire qsrom_download    = ioctl_download && (ioctl_index == QSROM_IOCTL_INDEX);
+wire qsrom_ioctl_write = ioctl_wr && (ioctl_index == QSROM_IOCTL_INDEX);
+
+wire [15:0] qs_rom_dout;
+dpram #(12) qs_rom
+(
+	.wrclock	( clk_sys				),
+	.wraddress	( ioctl_addr[12:1]		),
+	.wren		( qsrom_ioctl_write		),
+	.byteena_a	( 2'b11					),
+	.data		( ioctl_dout			),	// Motorola endianness
+
+	.rdclock	( clk_sys				),
+	.rdaddress	( cpu_raw_addr[12:1]	),
+	.q			( qs_rom_dout			)
 );
 
 
@@ -525,6 +580,29 @@ zx8301 zx8301
 	.VBlank  ( VBlank     )
 );
 
+/////////////////  QSOUND  ///////////////////////
+
+wire [7:0] qsound_cpu_din = cpu_uds ? cpu_dout[15:8] : cpu_dout[7:0];
+wire [14:0] qsound_l;
+wire [14:0] qsound_r;
+wire [7:0]  qsound_dout;
+
+qsound qsound
+(
+	.clk         ( clk_sys          ),
+	.reset       ( reset            ),
+	.enable      ( qsound_active    ),
+	.addr        ( cpu_raw_addr     ),
+	.din         ( qsound_cpu_din   ),
+	.dout        ( qsound_dout      ),
+	.rd          ( cpu_rd           ),
+	.wr          ( cpu_wr           ),
+	.ce_ay       ( ce_ay            ),
+	.stereo_mode ( status[18:17]    ),
+	.sound_l     ( qsound_l         ),
+	.sound_r     ( qsound_r         )
+);
+
 /////////////////  ZX8302  ////////////////////////
 
 wire zx8302_sel = cpu_io && ql_io && !cpu_addr[6];
@@ -534,8 +612,13 @@ wire [15:0] zx8302_dout;
 wire mdv_download = (ioctl_index == MDV_IOCTL_INDEX) && ioctl_download;
 
 wire audio;
-assign AUDIO_L = {15{audio}};
-assign AUDIO_R = {15{audio}};
+// Beeper plus QSound, unsigned (AUDIO_S = 0): silence at mid scale
+wire [15:0] beeper_vol = audio ? 16'd3000 : 16'd0;
+wire [15:0] raw_audio_l = {1'b0, qsound_active ? qsound_l : 15'd0} + beeper_vol;
+wire [15:0] raw_audio_r = {1'b0, qsound_active ? qsound_r : 15'd0} + beeper_vol;
+
+assign AUDIO_L = {~raw_audio_l[15], raw_audio_l[14:0]};
+assign AUDIO_R = {~raw_audio_r[15], raw_audio_r[14:0]};
 assign AUDIO_S = 0;
 assign AUDIO_MIX = 0;
 
@@ -640,6 +723,11 @@ wire gc_ram2 = gc_en && {cpu_addr[23:14], 2'b00} == 12'h01C && !gc_io; 	// 16kb 
 wire gc_boot_rom = gc_en && cpu_addr[23:16] == 8'h04;							// Another copy of the boot ROM $040000-$04ffff
 wire gc_os_rom = gc_en && cpu_addr[23:16] == 8'h40;							// SuperGoldCard copy of QL ROM $400000-$40ffff
 //wire gc_ext_io = gc_en && {cpu_addr[23:18], 2'b00} == 8'h4c;				// SuperGoldCard extended I/O $4c0000-$4fffff
+// QSound: registers at $0C2000-$0C2003 and $0C3000-$0C3003, ROM at $0C0000-$0C1FFF
+wire qsound_space = qsound_active && (cpu_raw_addr[23:16] == 8'h0C) &&
+                    ((cpu_raw_addr[15:2] == 14'b0010_0000_0000_00) ||
+                     (cpu_raw_addr[15:2] == 14'b0011_0000_0000_00));
+wire qsound_rom_space = qsound_active && (cpu_raw_addr[23:16] == 8'h0C) && (cpu_raw_addr[15:13] == 3'b000);
 
 wire [15:0] io_dout = 
 	qimi_sel? {qimi_data, qimi_data}:
@@ -676,12 +764,15 @@ wire [15:0] ql_dout =
 
 // Bring it all together
 wire [15:0] cpu_din =
+	qsound_space? {qsound_dout, qsound_dout}:			// 0c2000..0c3003: QSound registers
+	qsound_rom_space? qs_rom_dout:						// 0c0000..0c1fff: QSound ROM
 	ql_io? io_dout:										// 18000..1bfff: Always mapped
 	gc_en? gc_dout:											// GC-mode memory spaces
 	ql_dout;													// QL-mode memory spaces
 
 
 wire cpu_dtack =
+	qsound_space? 1'b1:
 	qlsd_sel? qlsd_dtack:
 	rom_shadow_read || rom_shadow_write? sdram_dtack:
 	cpu_ram? sdram_dtack && !ram_delay_dtack:
@@ -694,7 +785,8 @@ wire cpu_dtack =
 //end
 
 wire [23:1] cpu_addr16;
-wire [23:0] cpu_addr = {cpu_addr16, !cpu_uds && cpu_lds} & cpu_addr_mask;
+wire [23:0] cpu_raw_addr = {cpu_addr16, !cpu_uds && cpu_lds};	// unmasked: QSound also with 128k
+wire [23:0] cpu_addr = cpu_raw_addr & cpu_addr_mask;
 wire [15:0] cpu_dout;
 wire [1:0] cpu_ipl;
 wire cpu_uds_n;
