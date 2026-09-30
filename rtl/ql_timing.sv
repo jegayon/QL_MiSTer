@@ -29,7 +29,7 @@ reg delay_reg;
 reg [5:0] chunk;					// We got 40 chunks per display line...
 reg [3:0] chunkCycle;			// ...with 12 cycles per chunk
 
-wire [5:0] num_busy_chunks = VBlank ? 6'd27 : 6'd28;	// 28 chunks used by ZX8301 for video, 27 during vblank (measured on a real QL)
+wire [5:0] num_busy_chunks = VBlank ? 6'd13 : 6'd31;	// 31 chunks used by ZX8301 for video, 13 in the border lines (measured on a real QL)
 wire could_start = chunk >= num_busy_chunks || chunkCycle == 4'd0; // For used chunks, the CPU can only access RAM in-between 
 
 
