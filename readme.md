@@ -1,5 +1,48 @@
 # Sinclair QL for [MiSTer Board](https://github.com/MiSTer-devel/Main_MiSTer/wiki) 
 
+## About this fork
+
+This fork of the [MiSTer QL core](https://github.com/MiSTer-devel/QL_MiSTer) adds QSound and brings the timing of the 68008 in line with a real QL, measured with test programs on a real machine (JS ROM, 128K and with expansion RAM).
+
+### What it adds
+* **QSound**: the AY-3-8910 sound card for the QL, with its 8K ROM at $0C0000 (loaded from the OSD with *Load QSound*) and its registers at $0C2000 and $0C3000. The OSD lets you choose the AY clock (750 kHz, 1 MHz, 1.77 MHz or 2 MHz) and mono, stereo ABC or stereo ACB output. QSound uses the address space at $0C0000, so while it is enabled only 128k and 640k of RAM are offered, as on real hardware.
+* **Timing measured on a real QL**: only the 128K on the motherboard wait for the ZX8301; ROM, I/O and expansion RAM have no wait states, as on a QL; writes get their wait states; and the ZX8301 uses 31 of the 40 chunks of each visible line and 13 of each border line, as measured in each region of the frame.
+* **IPC link fix**: a write to $18003 is taken once per bus cycle, so a repeated write can no longer corrupt the bit being sent to the IPC.
+* **Frame interrupt 41 lines before the first visible line** (6 lines of vertical sync and 35 of top border), as measured on a real QL.
+* **Immediate screen switch**: a change of screen (bit 7 of $18063) shows at once, even in the middle of a frame, so double buffered programs display correctly.
+* **Square pixel option** (*CRT 1:1 Square Pixel*): a 14 MHz pixel clock with the same line length, for square pixels on a CRT.
+
+### Measurements
+Blocks counted in 10 seconds by the timing test programs, on a real QL and on this core:
+
+| Test | Real QL | This core |
+|---|---|---|
+| T0 NOP loop (expansion RAM) | 1076 | 1076 |
+| T1 copy, internal RAM | 354 | 354 |
+| T2 read, internal RAM | 530 | 532 |
+| T3 write, internal RAM | 510 | 510 |
+| T4 copy, expansion RAM | 555 | 555 |
+| T5 copy with interrupts | 314 | 318 |
+| T6 MULU, D5=0 | 539 | 539 |
+| T7 MULU, D5=$FFFF | 367 | 367 |
+| T8 DIVU | 248 | 248 |
+
+With the code in the internal 128K as well, the eleven tests of a second battery (copies, reads and writes of bytes, words and long words, MOVEM, CLR, ADD) give the same result as the real QL, except the test with interrupts (2 % faster). The official core ran code in expansion RAM at about half the speed of a real QL.
+
+### Notes
+* The core uses the Hermes IPC firmware (you will hear the key click), which answers the IPC link faster than the original Sinclair firmware.
+* The QSound ROM and more information about the card: [QL_Qsound2](https://github.com/alvaroalea/QL_Qsound2), the QSound clone by Álvaro Alea.
+
+### Credits
+* The original QL core for the MiST by Till Harbaum, and its MiSTer port with its many improvements (see below).
+* `ql_timing` (the model of the ZX8301 memory contention) by Marcel Kilgus and Daniele Terdina.
+* fx68k (the 68000 CPU) by Jorge Cwik.
+* T48 (the 8049 of the IPC) by Arnim Läuger.
+* [JT49](https://github.com/jotego/jt49) (the AY-3-8910) by Jose Tejada.
+* [QL_Qsound2](https://github.com/alvaroalea/QL_Qsound2), the QSound clone by Álvaro Alea.
+
+---
+
 This is a much advanced port of the Sinclair QL implementation for the [MiST](https://github.com/mist-devel/mist-board/tree/master/cores/ql)
 
 ### Changes from MiST implementation:
