@@ -31,6 +31,7 @@ module zx8301
 
 	// config options
 	input  ntsc,
+	input  square_ar,   // 0 = 10.5 MHz pixel clock, 1 = 14 MHz (square pixels, same line time)
 	input  [7:0] mc_stat,
 
 	// sdram interface
@@ -70,6 +71,16 @@ parameter NTSC_HFP = 10'd34;    // unused time before hsync
 parameter NTSC_HSW = 10'd64;    // width of hsync
 parameter NTSC_HBP = 10'd54;    // unused time after hsync
 // NTSC total: 664
+
+// The same lines with a 14 MHz pixel clock (square pixels, image centred)
+parameter PAL_HFP_14M  = 10'd124;
+parameter PAL_HSW_14M  = 10'd96;
+parameter PAL_HBP_14M  = 10'd164;
+// PAL total: 896 (64 us)
+parameter NTSC_HFP_14M = 10'd124;
+parameter NTSC_HSW_14M = 10'd88;
+parameter NTSC_HBP_14M = 10'd161;
+// NTSC total: 885 (63.2 us)
    
 parameter V   = 256;            // height of visible area
 parameter PAL_VFP = 10'd15;     // unused time before vsync
@@ -88,9 +99,9 @@ reg [9:0] sd_h_cnt;     // scandoubler horizontal pixel counter
 reg [9:0] v_cnt;        // vertical pixel counter
 
 // swtich between ntsc and pal values
-wire [9:0] hfp = ntsc?NTSC_HFP:PAL_HFP;
-wire [9:0] hsw = ntsc?NTSC_HSW:PAL_HSW;
-wire [9:0] hbp = ntsc?NTSC_HBP:PAL_HBP;
+wire [9:0] hfp = ntsc ? (square_ar ? NTSC_HFP_14M : NTSC_HFP) : (square_ar ? PAL_HFP_14M : PAL_HFP);
+wire [9:0] hsw = ntsc ? (square_ar ? NTSC_HSW_14M : NTSC_HSW) : (square_ar ? PAL_HSW_14M : PAL_HSW);
+wire [9:0] hbp = ntsc ? (square_ar ? NTSC_HBP_14M : NTSC_HBP) : (square_ar ? PAL_HBP_14M : PAL_HBP);
 wire [9:0] vfp = ntsc?NTSC_VFP:PAL_VFP;
 wire [9:0] vsw = ntsc?NTSC_VSW:PAL_VSW;
 wire [9:0] vbp = ntsc?NTSC_VBP:PAL_VBP;

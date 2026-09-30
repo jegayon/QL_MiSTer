@@ -69,6 +69,7 @@ parameter CONF_STR = {
 	"OFG,QSound Clock,750 kHz (QL),1.00 MHz (CPC),1.77 MHz (ZX),2.00 MHz (ST);",
 	"OHI,AY Mode,Mono,Stereo ABC,Stereo ACB;",
 	"O3,Video mode,PAL,NTSC;",
+	"O6,CRT 1:1 Square Pixel,Off,On;",
 	"OBC,Aspect ratio,Original,Full Screen,[ARC1],[ARC2];",
 	"O9A,Scandoubler Fx,None,HQ2x,CRT 25%,CRT 50%;",
 	"ODE,Scale,Normal,V-Integer,Narrower HV-Integer,Wider HV-Integer;",
@@ -149,6 +150,9 @@ parameter FRACT_11M = 17'd6866;			// 105MHz * 6866 / 65536 = 11.001MHz
 parameter DIV_131k = 10'd800;				// 105MHz / 800 = 131250Hz
 parameter DIV_VID = 4'd10;					// 105MHz / 10 = 10.5MHz*/
 
+// Pixel clock: 84MHz / 8 = 10.5MHz, or 84MHz / 6 = 14MHz for square pixels
+wire [3:0] div_vid_max = status[6] ? 4'd6 : DIV_VID;
+
 wire [16:0] fract_bus = 
 	cpu_speed == 0? FRACT_BUS_QL:
 	cpu_speed == 1? FRACT_BUS_16:
@@ -215,8 +219,8 @@ begin
 	if (div131k == DIV_131k - 1) div131k <= 0;
 	ce_131k <= !div131k;						
 		
-	// 10.5Mhz pixel clock
-	if (divVid == DIV_VID - 1) divVid <= 0;	
+	// 10.5Mhz (or 14Mhz) pixel clock
+	if (divVid >= div_vid_max - 4'd1) divVid <= 0;
 	ce_vid <= !divVid;
 	
 	// QL-SD clock
@@ -566,6 +570,7 @@ zx8301 zx8301
 	.ce_out  ( ce_pix     ),
 
 	.ntsc    ( ntsc_mode  ),
+	.square_ar ( status[6] ),
 	.mc_stat ( mc_stat    ),
 
 	.addr    ( video_addr ),
