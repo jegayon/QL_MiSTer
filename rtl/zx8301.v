@@ -83,11 +83,12 @@ parameter NTSC_HBP_14M = 10'd161;
 // NTSC total: 885 (63.2 us)
    
 parameter V   = 256;            // height of visible area
-parameter PAL_VFP = 10'd15;     // unused time before vsync
+parameter PAL_VFP = 10'd23;     // unused time before vsync
 parameter PAL_VSW = 10'd6;      // width of vsync
-parameter PAL_VBP = 10'd35;     // unused time after vsync
-// PAL total: 312. The frame interrupt (start of vsync) comes 41 lines before
-// the first visible line (6 of vsync + 35), as measured on a real QL
+parameter PAL_VBP = 10'd27;     // unused time after vsync
+// PAL total: 312. The frame interrupt (start of vsync) comes 33 lines before
+// the first visible line (6 of vsync + 27), as measured on a real QL by timing
+// a copy loop line by line through the frame (perfil3_bas)
 parameter NTSC_VFP = 10'd2;     // unused time before vsync
 parameter NTSC_VSW = 10'd2;     // width of vsync
 parameter NTSC_VBP = 10'd2;     // unused time after vsync
