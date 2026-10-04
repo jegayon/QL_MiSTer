@@ -19,6 +19,7 @@ module ql_timing
 	input       cpu_rw,
 	input			cpu_rom,
 	input			cpu_bram,	// the 128K of RAM on the motherboard, shared with the ZX8301
+	input			ql_io,		// the peripheral registers, $18000-$1BFFF
 
 	output		ram_delay_dtack
 );
@@ -29,7 +30,15 @@ reg delay_reg;
 reg [5:0] chunk;					// We got 40 chunks per display line...
 reg [3:0] chunkCycle;			// ...with 12 cycles per chunk
 
-wire [5:0] num_busy_chunks = VBlank ? 6'd13 : 6'd31;	// 31 chunks used by ZX8301 for video, 13 in the border lines (measured on a real QL)
+// 32 chunks used by the ZX8301 in the visible lines and 8 in the border ones, measured on a
+// real QL by timing a copy loop line by line through the frame (perfil3_bas)
+wire [5:0] num_busy_chunks = VBlank ? 6'd8 : 6'd32;
+
+// Accesses that wait for the ZX8301: the 128K on the motherboard, and reads of the peripheral
+// registers (on a real QL a loop reading $18021 is slower on the visible lines than on the
+// border ones, by as much as a RAM access; writes do not wait, or the link with the IPC would
+// be slower than on a real QL)
+wire contended = cpu_bram || (ql_io && cpu_rw);
 wire could_start = chunk >= num_busy_chunks || chunkCycle == 4'd0; // For used chunks, the CPU can only access RAM in-between 
 
 
@@ -40,7 +49,7 @@ reg prev_ds;
 // The 68000 asserts DS late in a write cycle, just before it samples DTACK: the wait must
 // start as soon as DS rises, not on the next bus cycle, or a write would not see it.
 // (Reads assert DS earlier, so for them nothing changes.)
-wire new_access_wait = enable && ds && !prev_ds && (cpu_bram || (cpu_uds && cpu_lds));
+wire new_access_wait = enable && ds && !prev_ds && (contended || (cpu_uds && cpu_lds));
 assign ram_delay_dtack = delay_reg || new_access_wait;
 
 
@@ -69,10 +78,10 @@ begin
 					chunk <= chunk + 6'd1;
 			end
 
-			if (ds && ~prev_ds && !cpu_bram)
+			if (ds && ~prev_ds && !contended)
 			begin
-				// New bus access outside the 128K on the motherboard (ROM, I/O, expansion RAM):
-				// the ZX8301 is not involved, so there are no wait states. A 16 bit access only
+				// New bus access that does not wait for the ZX8301 (ROM, expansion RAM, writes
+				// to the peripheral registers): there are no wait states. A 16 bit access only
 				// takes the second access of the 8 bit bus of the 68008 (counted from DS, which
 				// rises one cycle later in a write).
 				delay_reg <= cpu_uds && cpu_lds;
@@ -81,7 +90,7 @@ begin
 			end
 			else if (ds && ~prev_ds && could_start)
 			begin
-				// New bus access to the 128K on the motherboard in a free chunk: it goes on at
+				// New bus access that waits for the ZX8301, in a free chunk: it goes on at
 				// once. A 16 bit access still takes its second access, which again waits for a
 				// free chunk. (A write gets its first wait state from new_access_wait, as the
 				// ZX8301 only checks DS.)
@@ -91,7 +100,7 @@ begin
 			end
 			else if (ds && ~prev_ds)
 			begin
-				// New bus access to the 128K on the motherboard in a busy chunk: wait for the
+				// New bus access that waits for the ZX8301, in a busy chunk: wait for the
 				// ZX8301 to let it start.
 				delay_reg <= 1;
 				dtack_count <= 3'd1;
@@ -101,10 +110,11 @@ begin
 			begin
 				if (dtack_count == 3'd1 && delay_reg)
 				begin
-					// Only the 128K on the motherboard are shared with the ZX8301: ROM,
-					// I/O and expansion RAM never wait for its chunks (they still pay
-					// the second access of the 8 bit bus of the 68008)
-					if (could_start || !cpu_bram)
+					// Only the 128K on the motherboard and the reads of the peripheral
+					// registers wait for its chunks: ROM, expansion RAM and the writes to
+					// the peripheral registers never do (they still pay the second access
+					// of the 8 bit bus of the 68008)
+					if (could_start || !contended)
 					begin
 						if (extra_access)
 						begin
