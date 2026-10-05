@@ -45,7 +45,8 @@ module zx8301
    output reg hs,
    output reg vs,
 	output reg HBlank,
-	output reg VBlank
+	output reg VBlank,
+	output reg line_start	// one clock at the first pixel of the visible area of each line
 );
 
 /* ----------------------------------------------------------------- */
@@ -126,9 +127,13 @@ reg flash_state;
 
 // horizontal pixel counter
 always@(posedge clk) begin
+	line_start <= 0;
 	if(ce) begin
 		// make sure h counter runs synchronous to bus_cycle
-		if(h_cnt==H+hfp+hsw+hbp-1) h_cnt <= 0;
+		if(h_cnt==H+hfp+hsw+hbp-1) begin
+			h_cnt <= 0;
+			line_start <= 1;
+		end
 		else h_cnt <= h_cnt + 1'd1;
 
 		// generate positive hsync signal

@@ -118,7 +118,7 @@ pll pll
 );
 
 // 84MHz sys_clk
-parameter FRACT_BUS_QL = 17'd11702;		// 84MHz * 11702 / 65536 = 14.999MHz
+parameter FRACT_BUS_QL = 17'd11703;		// 84MHz * 11702 / 65536 = 14.999MHz
 parameter FRACT_BUS_16 = 17'd24966;		// 84MHz * 24966 / 65536 = 31.999MHz
 parameter FRACT_BUS_24 = 17'd37449;		// 84MHz * 37449 / 65536 = 48.000MHz
 parameter FRACT_BUS_FULL = 17'h10000;	// 84MHz
@@ -193,6 +193,7 @@ begin
 	reg bus_pol;
 	reg bus_tick;
 	reg [15:0] cnt_bus;
+	reg [4:0] cnt_ql;
 	reg [15:0] cnt_sd;
 	reg [15:0] cnt_11m;
 	reg [9:0] div131k;
@@ -202,6 +203,7 @@ begin
 	begin
 		bus_pol <= 0;
 		cnt_bus <= 0;
+		cnt_ql <= 0;		
 		div131k <= 0;
 		divVid <= 0;
 	end else begin	
@@ -209,8 +211,21 @@ begin
 		divVid <= divVid + 4'd1;
 		end
 	
-	// CPU clock
-	{bus_tick, cnt_bus} <= cnt_bus + fract_bus;
+	// CPU clock. At QL speed it is exactly 15 MHz = 84 MHz * 5 / 28,
+	// locked to the 10.5 MHz pixel clock (84 MHz / 8): 960 bus ticks in a
+	// line of 672 pixels, as on a QL, where both come from the same 15 MHz
+	// crystal. The fractional divider used before drifted against the
+	// video. The faster speeds keep the fractional divider.
+	if (cpu_speed == 0) begin
+		if (cnt_ql >= 5'd23) begin
+			cnt_ql <= cnt_ql - 5'd23;
+			bus_tick <= 1;
+		end else begin
+			cnt_ql <= cnt_ql + 5'd5;
+			bus_tick <= 0;
+		end
+	end else
+		{bus_tick, cnt_bus} <= cnt_bus + fract_bus;
 	ce_bus_p <= bus_tick && !bus_pol;
 	ce_bus_n <= bus_tick && bus_pol;
 	bus_pol <= bus_tick ^ bus_pol; 
@@ -518,7 +533,7 @@ dpram #(15) vram
 
 wire video_r, video_g, video_b;
 wire HS, VS;
-wire HBlank, VBlank, ce_pix;
+wire HBlank, VBlank, ce_pix, line_start;
 
 reg HSync, VSync;
 always @(posedge CLK_VIDEO) begin
@@ -582,7 +597,8 @@ zx8301 zx8301
 	.g       ( video_g    ),
 	.b       ( video_b    ),
 	.HBlank  ( HBlank     ),
-	.VBlank  ( VBlank     )
+	.VBlank  ( VBlank     ),
+	.line_start ( line_start )
 );
 
 /////////////////  QSOUND  ///////////////////////

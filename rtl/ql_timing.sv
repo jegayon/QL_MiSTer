@@ -13,6 +13,7 @@ module ql_timing
 	input			enable,
 	input			ce_bus_p,
 	input			VBlank,
+	input			line_start,	// first pixel of the visible area of a line (zx8301)
 	
 	input			cpu_uds,
 	input			cpu_lds,
@@ -29,6 +30,17 @@ reg delay_reg;
 
 reg [5:0] chunk;					// We got 40 chunks per display line...
 reg [3:0] chunkCycle;			// ...with 12 cycles per chunk
+
+// On a ZX8301 the chunks are always in the same place within each line, as
+// the chip that draws the line also decides when the CPU may access the RAM.
+// So the chunk counter is set again at every line, when the visible area
+// begins. At that pixel it is at chunk 18, cycle 0: the position that makes
+// a pass of a scene of a demo (ql26inv) last as on a real QL, measured with
+// interrupts off from the start of a frame (clearing 2298 counts, drawing
+// 1449 against 1448). The position hardly changes simpler loops (perfil3_bas)
+localparam [5:0] CHUNK_AT_LINE = 6'd18;
+localparam [3:0] CYCLE_AT_LINE = 4'd0;
+reg line_sync;
 
 // 32 chunks used by the ZX8301 in the visible lines and 8 in the border ones, measured on a
 // real QL by timing a copy loop line by line through the frame (perfil3_bas)
@@ -63,19 +75,33 @@ begin
 		chunk <= 0;
 		chunkCycle <= 0;
 		delay_reg <= 0;
+		line_sync <= 0;
 	end 
 	else
 	begin
+		if (line_start)
+			line_sync <= 1;
+
 		if (ce_bus_p)
 		begin
-			chunkCycle <= chunkCycle + 4'd1;
-			if (chunkCycle == 4'd11)
+			if (line_sync)
 			begin
-				chunkCycle <= 4'd0;
-				if (chunk == 6'd39) 
-					chunk <= 6'd0;
-				else
-					chunk <= chunk + 6'd1;
+				// New line
+				line_sync <= 0;
+				chunk <= CHUNK_AT_LINE;
+				chunkCycle <= CYCLE_AT_LINE;
+			end
+			else
+			begin
+				chunkCycle <= chunkCycle + 4'd1;
+				if (chunkCycle == 4'd11)
+				begin
+					chunkCycle <= 4'd0;
+					if (chunk == 6'd39) 
+						chunk <= 6'd0;
+					else
+						chunk <= chunk + 6'd1;
+				end
 			end
 
 			if (ds && ~prev_ds && !contended)
