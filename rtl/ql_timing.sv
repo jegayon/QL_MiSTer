@@ -34,11 +34,13 @@ reg [3:0] chunkCycle;			// ...with 12 cycles per chunk
 // On a ZX8301 the chunks are always in the same place within each line, as
 // the chip that draws the line also decides when the CPU may access the RAM.
 // So the chunk counter is set again at every line, when the visible area
-// begins. At that pixel it is at chunk 18, cycle 0: the position that makes
-// a pass of a scene of a demo (ql26inv) last as on a real QL, measured with
-// interrupts off from the start of a frame (clearing 2298 counts, drawing
-// 1449 against 1448). The position hardly changes simpler loops (perfil3_bas)
-localparam [5:0] CHUNK_AT_LINE = 6'd18;
+// begins: the busy chunks start at the first visible pixel. With this
+// position ql26inv runs as on a real QL. Chunk 18 brings a pass of one of
+// its scenes one count closer to a real QL (drawing 1449 against 1448,
+// 1452 here), but then the demo crashes, so the result of the demo, which
+// is on a knife edge, decided. The position hardly changes simpler loops
+// (perfil3_bas) or the timing tests
+localparam [5:0] CHUNK_AT_LINE = 6'd0;
 localparam [3:0] CYCLE_AT_LINE = 4'd0;
 reg line_sync;
 
