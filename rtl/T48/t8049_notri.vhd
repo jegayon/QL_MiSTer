@@ -78,7 +78,8 @@ entity t8049_notri is
     p1_i          : in  std_logic_vector( 7 downto 0);
     p1_o          : out std_logic_vector( 7 downto 0);
     p1_low_imp_o  : out std_logic;
-    prog_n_o      : out std_logic
+    prog_n_o      : out std_logic;
+    fw_sel_i      : in  std_logic := '0'  -- firmware: 0 Sinclair, 1 Hermes
   );
 
 end t8049_notri;
@@ -224,6 +225,7 @@ begin
   rom_2k_b : t49_rom
     port map (
       clk_i      => xtal_i,
+      fw_sel_i   => fw_sel_i,
       rom_addr_i => pmem_addr_s(rom_addr_width_c-1 downto 0),
       rom_data_o => pmem_data_s
     );

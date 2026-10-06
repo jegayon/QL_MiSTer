@@ -24,6 +24,7 @@ module ipc (
 	input 		 reset,
 	input        clk,
 	input        ce_11m,
+	input        fw_hermes,		// firmware of the 8049: 0 Sinclair, 1 Hermes
 
 	// synchronous serial connection
 	output       comctrl,
@@ -89,7 +90,8 @@ t8049_notri #(0) t8049 (
    .p1_i      ( 8'h00      ),
    .p1_o      ( t8049_p1_o ),
    .p2_i      ( t8049_p2_i ),
-   .p2_o      ( t8049_p2_o )
+   .p2_o      ( t8049_p2_o ),
+   .fw_sel_i  ( fw_hermes  )
 );
 
 assign t8049_db_i = 

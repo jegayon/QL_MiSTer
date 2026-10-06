@@ -64,6 +64,7 @@ parameter CONF_STR = {
 	"-;",
 	"F4,ROM,Load OS;",
 	"F5,ROMBIN,Load QSound;",
+	"OJ,IPC firmware,Sinclair,Hermes;",
 	"-;",
 	"O1,QSound (AY),On,Off;",
 	"OFG,QSound Clock,750 kHz (QL),1.00 MHz (CPC),1.77 MHz (ZX),2.00 MHz (ST);",
@@ -645,12 +646,18 @@ assign AUDIO_MIX = 0;
 
 wire mdv_led;
 
+// Firmware of the 8049 (IPC): Sinclair, as on a QL, or Hermes. It is taken
+// at reset, as changing the ROM of a running 8049 would hang it
+reg ipc_hermes;
+always @(posedge clk_sys) if (reset) ipc_hermes <= status[19];
+
 zx8302 zx8302
 (
 	.reset        ( reset        ),
 	.reset_mdv    ( osd_reset    ),
 	.clk          ( clk_sys      ),
 	.ce_11m       ( ce_11m       ),
+	.ipc_hermes   ( ipc_hermes   ),
 
 	.xint         ( qimi_irq     ),
 	.ipl          ( cpu_ipl      ),

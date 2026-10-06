@@ -87,6 +87,7 @@ package t48_core_comp_pack is
   component t49_rom
     port (
       clk_i      : in  std_logic;
+      fw_sel_i   : in  std_logic := '0';
       rom_addr_i : in  std_logic_vector(10 downto 0);
       rom_data_o : out std_logic_vector( 7 downto 0)
     );

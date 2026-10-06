@@ -50,6 +50,7 @@ entity t49_rom is
 
   port (
     clk_i      : in  std_logic;
+    fw_sel_i   : in  std_logic := '0';  -- firmware: 0 Sinclair, 1 Hermes
     rom_addr_i : in  std_logic_vector(10 downto 0);
     rom_data_o : out std_logic_vector( 7 downto 0)
   );

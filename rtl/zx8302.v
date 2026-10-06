@@ -25,6 +25,7 @@ module zx8302
 (
 		input          clk,
 		input          ce_11m,    	// 11 MHz ipc
+		input          ipc_hermes,	// firmware of the 8049: 0 Sinclair, 1 Hermes
       input          reset,
       input          reset_mdv,
 		
@@ -192,6 +193,7 @@ ipc ipc (
 	.reset    	    ( reset          ),
 	.clk				 ( clk            ),
 	.ce_11m         ( ce_11m         ),
+	.fw_hermes      ( ipc_hermes     ),
 
 	.comctrl        ( ipc_comctrl    ),
 	.comdata_in     ( ipc_comdata_in ),

@@ -48,17 +48,22 @@ architecture struct of t49_rom is
   component rom_t49
     port(
       clock : in  std_logic;
-      address   : in  std_logic_vector(10 downto 0);
+      address   : in  std_logic_vector(11 downto 0);
       q   : out std_logic_vector( 7 downto 0)
     );
   end component;
 
+  -- The firmware chosen is the upper half of the ROM
+  signal addr_s : std_logic_vector(11 downto 0);
+
 begin
+
+  addr_s <= fw_sel_i & rom_addr_i;
 
   rom_b : rom_t49
     port map (
       clock     => clk_i,
-      address   => rom_addr_i,
+      address   => addr_s,
       q         => rom_data_o
     );
 
